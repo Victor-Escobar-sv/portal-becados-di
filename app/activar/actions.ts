@@ -31,7 +31,7 @@ export async function validarToken(token: string) {
   // y las políticas RLS bloquearían la lectura
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('estudiantes')
     .select('id, nombre_completo_becado, correo_personal, ha_completado_onboarding, onboarding_token')
     .eq('onboarding_token', token)
@@ -95,7 +95,7 @@ export async function activarCuenta(
   if (!validacion.success) {
     return {
       success: false,
-      message: validacion.message,
+      message: validacion.message || 'Error al validar el token',
     };
   }
 
@@ -104,7 +104,7 @@ export async function activarCuenta(
   if (!passwordValidation.success) {
     return {
       success: false,
-      message: passwordValidation.error.errors[0].message,
+      message: passwordValidation.error.issues[0].message,
     };
   }
 
@@ -132,7 +132,7 @@ export async function activarCuenta(
 
     // Paso 2: Actualizar la tabla estudiantes con Admin Client
     // IMPORTANTE: Quemar el token estableciéndolo en NULL
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await (supabaseAdmin as any)
       .from('estudiantes')
       .update({
         auth_user_id: authUser.user.id,
@@ -162,7 +162,7 @@ export async function activarCuenta(
       const resend = new Resend(process.env.RESEND_API_KEY);
       
       // Obtener el nombre completo del estudiante para personalizar el correo
-      const { data: estudianteData } = await supabaseAdmin
+      const { data: estudianteData } = await (supabaseAdmin as any)
         .from('estudiantes')
         .select('nombre_completo_becado')
         .eq('auth_user_id', authUser.user.id)

@@ -144,7 +144,7 @@ export async function generarExpediente(
 
     // Generar el PDF como buffer
     console.log('[Generar Expediente] Generando PDF para:', estudiante.id_becado_interno);
-    const pdfBuffer = await renderToBuffer(React.createElement(ExpedienteDocument, datosPDF));
+    const pdfBuffer = await renderToBuffer(React.createElement(ExpedienteDocument, datosPDF) as any);
     console.log('[Generar Expediente] PDF generado exitosamente, tamaño:', pdfBuffer.length, 'bytes');
 
     // Crear el cliente Admin de Supabase para subir el archivo
@@ -267,7 +267,7 @@ export async function generarCarnet(
 
     // Generar el PDF como buffer (placeholder: usando ExpedienteDocument por ahora)
     console.log('[Generar Carnet] Generando PDF para:', estudiante.id_becado_interno);
-    const pdfBuffer = await renderToBuffer(React.createElement(ExpedienteDocument, datosPDF));
+    const pdfBuffer = await renderToBuffer(React.createElement(ExpedienteDocument, datosPDF) as any);
     console.log('[Generar Carnet] PDF generado exitosamente, tamaño:', pdfBuffer.length, 'bytes');
 
     // Crear el cliente Admin de Supabase para subir el archivo

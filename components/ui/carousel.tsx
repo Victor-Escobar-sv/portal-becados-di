@@ -8,9 +8,8 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type CarouselApi = UseEmblaCarouselType[1];
-type UseCarouselParameters = Parameters<typeof useEmblaCarousel>[0];
-type CarouselOptions = UseCarouselParameters['options'];
-type CarouselPlugin = UseCarouselParameters['plugins'];
+type CarouselOptions = NonNullable<Parameters<typeof useEmblaCarousel>[0]>;
+type CarouselPlugin = Parameters<typeof useEmblaCarousel>[1];
 
 interface CarouselProps {
   opts?: CarouselOptions;
@@ -194,7 +193,7 @@ CarouselItem.displayName = 'CarouselItem';
 
 const CarouselPrevious = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof ArrowLeft>
+  React.ComponentPropsWithoutRef<'button'>
 >(({ className, ...props }, ref) => {
   const { orientation, scrollPrev, canScrollPrev } = useCarousel();
 
@@ -226,7 +225,7 @@ CarouselPrevious.displayName = 'CarouselPrevious';
 
 const CarouselNext = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof ArrowRight>
+  React.ComponentPropsWithoutRef<'button'>
 >(({ className, ...props }, ref) => {
   const { orientation, scrollNext, canScrollNext } = useCarousel();
 

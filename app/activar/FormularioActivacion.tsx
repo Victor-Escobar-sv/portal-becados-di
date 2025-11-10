@@ -65,7 +65,7 @@ export default function FormularioActivacion({
     if (!passwordValidation.success) {
       setMensaje({
         tipo: 'error',
-        texto: passwordValidation.error.errors[0].message,
+        texto: passwordValidation.error.issues[0].message,
       });
       return;
     }
