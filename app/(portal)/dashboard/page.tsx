@@ -148,8 +148,9 @@ export default async function DashboardPage() {
   // Criterio: Si nombre_emergencia tiene datos, el perfil está completo
   // Usar valores por defecto seguros en caso de que el campo no exista
   const nombreEmergencia = estudianteData.nombre_emergencia || null;
-  const perfilCompleto = 
-    nombreEmergencia && typeof nombreEmergencia === 'string' && nombreEmergencia.trim() !== '';
+  const perfilCompleto: boolean = Boolean(
+    nombreEmergencia && typeof nombreEmergencia === 'string' && nombreEmergencia.trim() !== ''
+  );
 
   // Obtener URLs de carnet y expediente
   // Intentar ambos nombres de campo (por si varían en la BD)
