@@ -112,7 +112,7 @@ export async function aprobarSolicitud(
     }
 
     // Paso 2: Obtener el id_becado_interno y nombre_completo_becado de la tabla estudiantes
-    const { data: estudiante, error: estudianteError } = await supabase
+    const { data: estudiante, error: estudianteError } = await (supabase as any)
       .from('estudiantes')
       .select('id_becado_interno, nombre_completo_becado')
       .eq('id', solicitud.estudiante_id)
