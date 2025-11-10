@@ -74,7 +74,7 @@ export default async function AdminDashboardPage() {
         responsable_encargado: s.responsable_encargado || null,
       };
     })
-    .filter((s): s is Solicitud => s !== null && s.id !== undefined && s.id !== 'undefined');
+    .filter((s: Solicitud | null): s is Solicitud => s !== null && s.id !== undefined && s.id !== 'undefined');
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
