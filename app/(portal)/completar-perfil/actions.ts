@@ -82,8 +82,8 @@ export async function guardarPerfilCompleto(
     // ========== PASO 2: VALIDAR DATOS CON ZOD ==========
     const validacion = perfilCompletoSchema.safeParse(datos);
     if (!validacion.success) {
-      console.error('Error de validación:', validacion.error.errors);
-      const primerError = validacion.error.errors[0];
+      console.error('Error de validación:', validacion.error.issues);
+      const primerError = validacion.error.issues[0];
       return {
         success: false,
         message: `Error de validación: ${primerError?.message || 'Los datos del formulario no son válidos'}`,
