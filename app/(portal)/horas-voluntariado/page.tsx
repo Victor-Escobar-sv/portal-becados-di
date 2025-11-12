@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import DashboardHeader from '../dashboard/DashboardHeader';
 import DashboardFooter from '../dashboard/DashboardFooter';
 import { Clock, Calendar, User, Award, ArrowLeft, ArrowUpDown, Loader2, HelpCircle, X, CheckCircle2 } from 'lucide-react';
+import { crearSolicitudHoras } from './actions';
 
 /**
  * Tipo para los registros de horas de voluntariado
@@ -48,6 +49,7 @@ export default function HorasVoluntariadoPage() {
   const [nombreActividad, setNombreActividad] = useState('');
   const [cantidadHoras, setCantidadHoras] = useState('');
   const [responsableEncargado, setResponsableEncargado] = useState('');
+  const [bitacoraArchivo, setBitacoraArchivo] = useState<File | null>(null);
 
   // Cargar datos al montar el componente
   useEffect(() => {
@@ -180,6 +182,7 @@ export default function HorasVoluntariadoPage() {
     setNombreActividad('');
     setCantidadHoras('');
     setResponsableEncargado('');
+    setBitacoraArchivo(null);
     // Limpiar timeouts si existen
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -211,6 +214,7 @@ export default function HorasVoluntariadoPage() {
     setNombreActividad('');
     setCantidadHoras('');
     setResponsableEncargado('');
+    setBitacoraArchivo(null);
   };
 
   // Efecto para manejar el temporizador cuando el modal está en estado 'exito'
@@ -245,11 +249,12 @@ export default function HorasVoluntariadoPage() {
         setModoModal('formulario');
         setMensajeSolicitud(null);
         setSegundosRestantes(15);
-        // Resetear formulario
-        setFechaActividad('');
-        setNombreActividad('');
-        setCantidadHoras('');
-        setResponsableEncargado('');
+    // Resetear formulario
+    setFechaActividad('');
+    setNombreActividad('');
+    setCantidadHoras('');
+    setResponsableEncargado('');
+    setBitacoraArchivo(null);
         // Recargar los datos después de cerrar
         window.location.reload();
       }, 15000);
@@ -275,7 +280,7 @@ export default function HorasVoluntariadoPage() {
     setMensajeSolicitud(null);
 
     try {
-      // Validaciones
+      // Validaciones básicas en el cliente
       if (!fechaActividad || !nombreActividad || !cantidadHoras) {
         setModoModal('formulario');
         setMensajeSolicitud({
@@ -295,38 +300,26 @@ export default function HorasVoluntariadoPage() {
         return;
       }
 
-      if (!estudianteId || !userId) {
-        setModoModal('formulario');
-        setMensajeSolicitud({
-          tipo: 'error',
-          texto: 'Error: No se pudo identificar tu cuenta. Por favor, recarga la página.',
-        });
-        return;
+      // Crear FormData para enviar a la Server Action
+      const formData = new FormData();
+      formData.append('fecha_actividad', fechaActividad);
+      formData.append('nombre_actividad', nombreActividad);
+      formData.append('cantidad_horas', cantidadHoras);
+      formData.append('responsable_encargado', responsableEncargado || 'N/A');
+      
+      // Agregar el archivo si existe
+      if (bitacoraArchivo) {
+        formData.append('bitacora', bitacoraArchivo);
       }
 
-      // Insertar en la tabla solicitudes_horas
-      // Type assertion para evitar problemas de tipos con Supabase
-      const solicitudData = {
-        estudiante_id: estudianteId,
-        auth_user_id: userId,
-        fecha_actividad: fechaActividad,
-        nombre_actividad: nombreActividad,
-        cantidad_horas: horas,
-        responsable_encargado: responsableEncargado || 'N/A',
-      };
+      // Llamar a la Server Action
+      const resultado = await crearSolicitudHoras(formData);
 
-      // Usar RPC o insert directo con type casting
-      // La tabla solicitudes_horas puede no estar en los tipos de Database
-      const { error: insertError } = await (supabase as any)
-        .from('solicitudes_horas')
-        .insert(solicitudData);
-
-      if (insertError) {
-        console.error('Error al enviar solicitud:', insertError);
+      if (!resultado.success) {
         setModoModal('formulario');
         setMensajeSolicitud({
           tipo: 'error',
-          texto: 'Error al enviar la solicitud. Por favor, intenta nuevamente.',
+          texto: resultado.message,
         });
         return;
       }
@@ -526,7 +519,7 @@ export default function HorasVoluntariadoPage() {
                   </p>
 
                   {/* Formulario */}
-                  <form onSubmit={enviarSolicitud} className="space-y-4">
+                  <form onSubmit={enviarSolicitud} encType="multipart/form-data" className="space-y-4">
                     {/* Campo Fecha */}
                     <div>
                       <label htmlFor="fecha" className="block text-sm font-medium text-white/90 mb-2">
@@ -589,6 +582,31 @@ export default function HorasVoluntariadoPage() {
                         placeholder="Si no sabes, pon N/A"
                         className="w-full rounded-md bg-white/10 border border-white/20 px-3 py-2 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-400"
                       />
+                    </div>
+
+                    {/* Campo Bitácora */}
+                    <div>
+                      <label htmlFor="bitacora" className="block text-sm font-medium text-white/90 mb-2">
+                        Adjunta tu bitácora (Foto o PDF)
+                      </label>
+                      <input
+                        id="bitacora"
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg,.pdf,application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setBitacoraArchivo(file);
+                        }}
+                        className="w-full rounded-md bg-white/10 border border-white/20 px-3 py-2 text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-500 file:text-white hover:file:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 file:cursor-pointer"
+                      />
+                      <p className="mt-1 text-xs text-white/60">
+                        Formatos aceptados: JPEG, PNG, PDF (máx. 10MB)
+                      </p>
+                      {bitacoraArchivo && (
+                        <p className="mt-1 text-xs text-blue-400">
+                          Archivo seleccionado: {bitacoraArchivo.name}
+                        </p>
+                      )}
                     </div>
 
                     {/* Mensaje de error (si existe) */}
@@ -660,12 +678,13 @@ export default function HorasVoluntariadoPage() {
                       setModoModal('formulario');
                       setMensajeSolicitud(null);
                       setSegundosRestantes(15);
-                      // Resetear formulario
-                      setFechaActividad('');
-                      setNombreActividad('');
-                      setCantidadHoras('');
-                      setResponsableEncargado('');
-                      // Recargar los datos
+        // Resetear formulario
+        setFechaActividad('');
+        setNombreActividad('');
+        setCantidadHoras('');
+        setResponsableEncargado('');
+        setBitacoraArchivo(null);
+        // Recargar los datos
                       window.location.reload();
                     }}
                     className="rounded-md bg-blue-500 px-6 py-2 text-sm font-medium text-white hover:bg-blue-600 transition-colors"

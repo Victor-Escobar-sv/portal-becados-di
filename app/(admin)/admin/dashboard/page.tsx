@@ -13,6 +13,7 @@ type Solicitud = {
   fecha_actividad: string;
   cantidad_horas: number;
   responsable_encargado?: string | null;
+  url_bitacora?: string | null;
 };
 
 /**
@@ -35,9 +36,10 @@ export default async function AdminDashboardPage() {
   // Filtrar por estado = 'pendiente'
   // Ordenar por fecha_solicitud ascendente (más antiguas primero)
   // NOTA: La vista puede usar 'solicitud_id' como nombre de columna para el ID
+  // IMPORTANTE: La vista debe incluir la columna 'url_bitacora' para mostrar las bitácoras adjuntas
   const { data: solicitudes, error } = await (supabase as any)
     .from('vista_solicitudes_admin')
-    .select('*')
+    .select('*') // Incluye todas las columnas de la vista, incluyendo url_bitacora
     .eq('estado', 'pendiente')
     .order('fecha_solicitud', { ascending: true });
 
@@ -72,6 +74,7 @@ export default async function AdminDashboardPage() {
         fecha_actividad: s.fecha_actividad || '',
         cantidad_horas: Number(s.cantidad_horas) || 0,
         responsable_encargado: s.responsable_encargado || null,
+        url_bitacora: s.url_bitacora || null,
       };
     })
     .filter((s: Solicitud | null): s is Solicitud => s !== null && s.id !== undefined && s.id !== 'undefined');

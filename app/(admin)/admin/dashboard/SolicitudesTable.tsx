@@ -17,6 +17,7 @@ type Solicitud = {
   fecha_actividad: string;
   cantidad_horas: number;
   responsable_encargado?: string | null;
+  url_bitacora?: string | null;
 };
 
 interface SolicitudesTableProps {
@@ -34,8 +35,14 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
   // Estado para el modal de aprobación
   const [solicitudAprobando, setSolicitudAprobando] = useState<Solicitud | null>(null);
   const [horasEditadas, setHorasEditadas] = useState<string>('');
+  const [observacionesAprobacion, setObservacionesAprobacion] = useState<string>('');
   const [isAprobando, setIsAprobando] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+
+  // Estado para el modal de rechazo
+  const [solicitudRechazando, setSolicitudRechazando] = useState<Solicitud | null>(null);
+  const [razonRechazo, setRazonRechazo] = useState<string>('');
+  const [isRechazando, setIsRechazando] = useState(false);
 
   // Verificar que el componente está montado para usar Portal
   useEffect(() => {
@@ -69,10 +76,21 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
     if (isAprobando) return; // No cerrar si está procesando
     setSolicitudAprobando(null);
     setHorasEditadas('');
+    setObservacionesAprobacion('');
   }, [isAprobando]);
+
+  // Cerrar modal de rechazo
+  const handleCerrarModalRechazo = useCallback(() => {
+    if (isRechazando) return; // No cerrar si está procesando
+    setSolicitudRechazando(null);
+    setRazonRechazo('');
+  }, [isRechazando]);
 
   // Abrir modal de aprobación
   const handleAbrirModalAprobacion = (solicitud: Solicitud) => {
+    // Log de desempate: verificar qué datos recibe el modal
+    console.log('Datos de la solicitud para el modal:', solicitud);
+    
     if (processingId || isPending) return;
     setSolicitudAprobando(solicitud);
     setHorasEditadas(solicitud.cantidad_horas.toString());
@@ -87,17 +105,21 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
 
   // Cerrar modal con tecla Escape
   useEffect(() => {
-    if (!solicitudAprobando) return;
+    if (!solicitudAprobando && !solicitudRechazando) return;
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isAprobando) {
-        handleCerrarModalAprobacion();
+      if (e.key === 'Escape') {
+        if (solicitudAprobando && !isAprobando) {
+          handleCerrarModalAprobacion();
+        } else if (solicitudRechazando && !isRechazando) {
+          handleCerrarModalRechazo();
+        }
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [solicitudAprobando, isAprobando, handleCerrarModalAprobacion]);
+  }, [solicitudAprobando, solicitudRechazando, isAprobando, isRechazando, handleCerrarModalAprobacion, handleCerrarModalRechazo]);
 
   // Confirmar aprobación
   const handleConfirmarAprobacion = () => {
@@ -115,11 +137,12 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
 
     startTransition(async () => {
       try {
-        const result = await aprobarSolicitud(solicitudAprobando.id, horas);
+        const result = await aprobarSolicitud(solicitudAprobando.id, horas, observacionesAprobacion);
         if (result.success) {
           // Limpiar estados antes de refrescar
           setSolicitudAprobando(null);
           setHorasEditadas('');
+          setObservacionesAprobacion('');
           setIsAprobando(false);
           setProcessingId(null);
           router.refresh();
@@ -137,34 +160,48 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
     });
   };
 
-  // Manejar rechazo
-  const handleRechazar = (solicitudId: string) => {
-    // Validar que el ID existe y no es undefined
-    if (!solicitudId || solicitudId === 'undefined' || solicitudId === undefined) {
-      console.error('Error: Intento de rechazar solicitud con ID inválido:', solicitudId);
-      alert('Error: ID de solicitud inválido.');
-      return;
-    }
-
-    if (processingId || isPending) return;
+  // Abrir modal de rechazo
+  const handleAbrirModalRechazo = (solicitud: Solicitud) => {
+    // Log de desempate: verificar qué datos recibe el modal
+    console.log('Datos de la solicitud para el modal:', solicitud);
     
-    if (!confirm('¿Estás seguro de que deseas rechazar esta solicitud?')) {
+    if (processingId || isPending) return;
+    setSolicitudRechazando(solicitud);
+    setRazonRechazo('');
+  };
+
+  // Confirmar rechazo
+  const handleConfirmarRechazo = async () => {
+    if (!solicitudRechazando || isRechazando) return;
+
+    // Validar que la razón no esté vacía
+    if (!razonRechazo.trim()) {
+      alert('Debes ingresar una razón.');
       return;
     }
 
-    setProcessingId(solicitudId);
+    setIsRechazando(true);
+    setProcessingId(solicitudRechazando.id);
+
     startTransition(async () => {
       try {
-        const result = await rechazarSolicitud(solicitudId);
+        const result = await rechazarSolicitud(solicitudRechazando.id, razonRechazo);
         if (result.success) {
+          // Limpiar estados antes de refrescar
+          setSolicitudRechazando(null);
+          setRazonRechazo('');
+          setIsRechazando(false);
+          setProcessingId(null);
           router.refresh();
         } else {
           alert(result.message);
+          setIsRechazando(false);
           setProcessingId(null);
         }
       } catch (error) {
         console.error('Error al rechazar solicitud:', error);
         alert('Error inesperado al rechazar la solicitud.');
+        setIsRechazando(false);
         setProcessingId(null);
       }
     });
@@ -240,16 +277,12 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
 
                       {/* Botón Rechazar */}
                       <button
-                        onClick={() => handleRechazar(solicitud.id)}
+                        onClick={() => handleAbrirModalRechazo(solicitud)}
                         disabled={isProcessing || isPending}
                         className="inline-flex items-center justify-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed"
                         title="Rechazar solicitud"
                       >
-                        {isProcessing && processingId === solicitud.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <X className="h-4 w-4" />
-                        )}
+                        <X className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -291,6 +324,20 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
                 </p>
               </div>
 
+              {/* Bitácora adjunta */}
+              {solicitudAprobando.url_bitacora && (
+                <div className="rounded-md border border-white/20 bg-white/5 p-3">
+                  <a
+                    href={solicitudAprobando.url_bitacora}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                  >
+                    Ver Bitácora Adjunta
+                  </a>
+                </div>
+              )}
+
               {/* Input de horas */}
               <div>
                 <label htmlFor="horas-editadas" className="block text-sm font-medium text-white mb-2">
@@ -310,6 +357,22 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
                 <p className="mt-1 text-xs text-white/60">
                   Horas originales: {solicitudAprobando.cantidad_horas}
                 </p>
+              </div>
+
+              {/* Textarea de observaciones */}
+              <div>
+                <label htmlFor="observaciones-aprobacion" className="block text-sm font-medium text-white mb-2">
+                  Notas u Observaciones (Opcional)
+                </label>
+                <textarea
+                  id="observaciones-aprobacion"
+                  value={observacionesAprobacion}
+                  onChange={(e) => setObservacionesAprobacion(e.target.value)}
+                  disabled={isAprobando}
+                  rows={3}
+                  className="w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-white placeholder-white/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-white/5 disabled:cursor-not-allowed resize-none"
+                  placeholder="Ingresa notas u observaciones sobre la aprobación (opcional)"
+                />
               </div>
             </div>
 
@@ -334,6 +397,98 @@ export default function SolicitudesTable({ solicitudes }: SolicitudesTableProps)
                   </>
                 ) : (
                   'Confirmar Aprobación'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Confirmación de Rechazo - Renderizado con Portal en nivel superior */}
+      {isMounted && solicitudRechazando && createPortal(
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={handleCerrarModalRechazo}
+        >
+          <div 
+            className="w-full max-w-md rounded-lg bg-[#101f60] border border-white/20 p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold text-white mb-4">
+              Confirmar Rechazo
+            </h2>
+            
+            <div className="space-y-4 mb-6">
+              {/* Información de la solicitud */}
+              <div className="space-y-2">
+                <p className="text-sm text-white/80">
+                  <span className="font-medium text-white">Becado:</span>{' '}
+                  {solicitudRechazando.nombre_completo_becado || 'N/A'}
+                </p>
+                <p className="text-sm text-white/80">
+                  <span className="font-medium text-white">Actividad:</span>{' '}
+                  {solicitudRechazando.nombre_actividad}
+                </p>
+                <p className="text-sm text-white/80">
+                  <span className="font-medium text-white">Fecha de Actividad:</span>{' '}
+                  {formatearFecha(solicitudRechazando.fecha_actividad)}
+                </p>
+              </div>
+
+              {/* Bitácora adjunta */}
+              {solicitudRechazando.url_bitacora && (
+                <div className="rounded-md border border-white/20 bg-white/5 p-3">
+                  <a
+                    href={solicitudRechazando.url_bitacora}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                  >
+                    Ver Bitácora Adjunta
+                  </a>
+                </div>
+              )}
+
+              {/* Textarea de razón de rechazo */}
+              <div>
+                <label htmlFor="razon-rechazo" className="block text-sm font-medium text-white mb-2">
+                  Razón del Rechazo (Obligatorio)
+                </label>
+                <textarea
+                  id="razon-rechazo"
+                  value={razonRechazo}
+                  onChange={(e) => setRazonRechazo(e.target.value)}
+                  disabled={isRechazando}
+                  rows={4}
+                  className="w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-white placeholder-white/50 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:bg-white/5 disabled:cursor-not-allowed resize-none"
+                  placeholder="Ingresa la razón del rechazo (obligatorio)"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCerrarModalRechazo}
+                disabled={isRechazando}
+                className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarRechazo}
+                disabled={isRechazando}
+                className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed"
+              >
+                {isRechazando ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  'Confirmar Rechazo'
                 )}
               </button>
             </div>

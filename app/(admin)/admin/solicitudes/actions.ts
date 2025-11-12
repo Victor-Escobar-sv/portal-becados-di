@@ -7,10 +7,12 @@ import { revalidatePath } from 'next/cache';
  * Rechaza una solicitud de horas de voluntariado
  * 
  * @param solicitudId - ID de la solicitud a rechazar
+ * @param observaciones - Observaciones del administrador sobre el rechazo
  * @returns Objeto con éxito y mensaje
  */
 export async function rechazarSolicitud(
-  solicitudId: string
+  solicitudId: string,
+  observaciones: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     // Validar que el ID existe y no es undefined
@@ -22,14 +24,55 @@ export async function rechazarSolicitud(
       };
     }
 
+    // Validar que las observaciones no estén vacías
+    if (!observaciones || observaciones.trim() === '') {
+      return {
+        success: false,
+        message: 'Se requiere una observación para rechazar.',
+      };
+    }
+
     const supabase = await createClient();
+
+    // Obtener el usuario admin
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error('Error al obtener usuario admin:', userError);
+      return {
+        success: false,
+        message: 'Error de autenticación. Por favor, inicia sesión nuevamente.',
+      };
+    }
+
+    // Obtener estudiante_id y nombre_actividad antes del update
+    const { data: solicitudData, error: solicitudDataError } = await (supabase as any)
+      .from('solicitudes_horas')
+      .select('estudiante_id, nombre_actividad')
+      .eq('id', solicitudId)
+      .single();
+
+    if (solicitudDataError || !solicitudData) {
+      console.error('Error al obtener datos de la solicitud:', solicitudDataError);
+      return {
+        success: false,
+        message: 'No se pudo encontrar la solicitud.',
+      };
+    }
 
     // Actualizar el estado de la solicitud a 'rechazado'
     // IMPORTANTE: La tabla 'solicitudes_horas' usa 'id' como PK (NO 'solicitud_id')
     // El 'solicitudId' que recibimos viene del componente y ya fue mapeado correctamente
     const { error } = await (supabase as any)
       .from('solicitudes_horas')
-      .update({ estado: 'rechazado' })
+      .update({
+        estado: 'rechazado',
+        observaciones_admin: observaciones,
+        aprobador_id: user.id,
+      })
       .eq('id', solicitudId); // La tabla real usa 'id', NO 'solicitud_id'
 
     if (error) {
@@ -38,6 +81,38 @@ export async function rechazarSolicitud(
         success: false,
         message: 'Error al rechazar la solicitud. Por favor, intenta nuevamente.',
       };
+    }
+
+    // Crear notificación para el estudiante
+    try {
+      // Buscar el auth_user_id del estudiante
+      const { data: estudianteData, error: estudianteError } = await (supabase as any)
+        .from('estudiantes')
+        .select('auth_user_id')
+        .eq('id', solicitudData.estudiante_id)
+        .single();
+
+      if (!estudianteError && estudianteData && estudianteData.auth_user_id) {
+        // Insertar notificación
+        const { error: notificacionError } = await (supabase as any)
+          .from('notificaciones')
+          .insert({
+            receptor_id: estudianteData.auth_user_id,
+            titulo: 'Solicitud Rechazada',
+            contenido: `Tu solicitud para "${solicitudData.nombre_actividad}" fue rechazada. Motivo: ${observaciones}`,
+          });
+
+        if (notificacionError) {
+          console.error('Error al crear notificación:', notificacionError);
+          // No detenemos el flujo si falla la notificación
+        }
+      } else {
+        console.error('No se encontró auth_user_id para el estudiante:', solicitudData.estudiante_id);
+        // No detenemos el flujo si no hay auth_user_id
+      }
+    } catch (notifError) {
+      console.error('Error inesperado al crear notificación:', notifError);
+      // No detenemos el flujo si falla la notificación
     }
 
     // Revalidar el dashboard administrativo
@@ -64,14 +139,17 @@ export async function rechazarSolicitud(
  * 2. Obtiene el id_becado_interno y nombre_completo_becado de la tabla estudiantes usando estudiante_id
  * 3. Inserta en horas_voluntariados con los datos de la solicitud (incluyendo nombre y horas editadas si aplica)
  * 4. Actualiza el estado de la solicitud a 'aprobado'
+ * 5. Crea notificación para el estudiante
  * 
  * @param solicitudId - ID de la solicitud a aprobar
  * @param horasAprobadas - (Opcional) Cantidad de horas aprobadas. Si no se proporciona, usa la cantidad de la solicitud
+ * @param observaciones - (Opcional) Observaciones del administrador sobre la aprobación
  * @returns Objeto con éxito y mensaje
  */
 export async function aprobarSolicitud(
   solicitudId: string,
-  horasAprobadas?: number
+  horasAprobadas?: number,
+  observaciones?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     // Validar que el ID existe y no es undefined
@@ -84,6 +162,20 @@ export async function aprobarSolicitud(
     }
 
     const supabase = await createClient();
+
+    // Obtener el usuario admin
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error('Error al obtener usuario admin:', userError);
+      return {
+        success: false,
+        message: 'Error de autenticación. Por favor, inicia sesión nuevamente.',
+      };
+    }
 
     // Paso 1: Obtener la solicitud por ID
     // IMPORTANTE: La tabla 'solicitudes_horas' usa 'id' como PK (NO 'solicitud_id')
@@ -111,10 +203,10 @@ export async function aprobarSolicitud(
       };
     }
 
-    // Paso 2: Obtener el id_becado_interno y nombre_completo_becado de la tabla estudiantes
+    // Paso 2: Obtener el id_becado_interno, nombre_completo_becado y auth_user_id de la tabla estudiantes
     const { data: estudiante, error: estudianteError } = await (supabase as any)
       .from('estudiantes')
-      .select('id_becado_interno, nombre_completo_becado')
+      .select('id_becado_interno, nombre_completo_becado, auth_user_id')
       .eq('id', solicitud.estudiante_id)
       .single();
 
@@ -183,7 +275,11 @@ export async function aprobarSolicitud(
     // Paso 4: Actualizar el estado de la solicitud a 'aprobado'
     const { error: updateError } = await (supabase as any)
       .from('solicitudes_horas')
-      .update({ estado: 'aprobado' })
+      .update({
+        estado: 'aprobado',
+        observaciones_admin: observaciones || null,
+        aprobador_id: user.id,
+      })
       .eq('id', solicitudId);
 
     if (updateError) {
@@ -196,7 +292,34 @@ export async function aprobarSolicitud(
       };
     }
 
-    // Paso 5: Revalidar el dashboard administrativo
+    // Paso 5: Crear notificación para el estudiante
+    try {
+      if (estudiante.auth_user_id) {
+        // Insertar notificación
+        const contenidoNotificacion = `¡Felicidades! Tu solicitud para "${solicitud.nombre_actividad}" fue aprobada.${observaciones ? ' Observaciones: ' + observaciones : ''}`;
+        
+        const { error: notificacionError } = await (supabase as any)
+          .from('notificaciones')
+          .insert({
+            receptor_id: estudiante.auth_user_id,
+            titulo: 'Solicitud Aprobada',
+            contenido: contenidoNotificacion,
+          });
+
+        if (notificacionError) {
+          console.error('Error al crear notificación:', notificacionError);
+          // No detenemos el flujo si falla la notificación
+        }
+      } else {
+        console.error('No se encontró auth_user_id para el estudiante:', solicitud.estudiante_id);
+        // No detenemos el flujo si no hay auth_user_id
+      }
+    } catch (notifError) {
+      console.error('Error inesperado al crear notificación:', notifError);
+      // No detenemos el flujo si falla la notificación
+    }
+
+    // Paso 6: Revalidar el dashboard administrativo
     revalidatePath('/admin/dashboard');
 
     return {

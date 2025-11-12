@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { logout } from '@/app/actions/auth';
+import NotificationBell from '@/components/portal/NotificationBell';
 
 export default function DashboardHeader() {
   return (
@@ -24,6 +25,9 @@ export default function DashboardHeader() {
         />
       </div>
       <div className="flex items-center gap-3">
+        {/* Campana de Notificaciones */}
+        <NotificationBell />
+
         {/* Menú de Ajustes */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
